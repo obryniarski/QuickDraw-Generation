@@ -4,7 +4,7 @@ import torchvision
 import torch.nn as nn
 from torchsummary import summary
 
-
+# residual block as in ResNet
 class ResBlock(nn.Module):
     def __init__(self, in_filters, num_filters, slope=0.02, bn=True):
         super(ResBlock, self).__init__()
@@ -34,7 +34,7 @@ class ResBlock(nn.Module):
         return out
 
 
-
+# basic encoder-decoder with no skip connections or resblocks
 class Generator(nn.Module):
     def __init__(self, imsize=28):
         super(Generator, self).__init__()
@@ -90,7 +90,7 @@ class Generator(nn.Module):
 
 
 
-
+#  adds skip connections as in UNet, like pix2pix
 class Skip_Generator(nn.Module):
     def __init__(self, imsize=28):
         super(Skip_Generator, self).__init__()
@@ -162,7 +162,7 @@ class Skip_Generator(nn.Module):
 
 
 
-
+# passes input all the way to end, so we are only adding to it (no subtraction because of sigmoid)
 class Add_Skip_Generator(nn.Module):
     def __init__(self, imsize=28):
         super(Add_Skip_Generator, self).__init__()
@@ -202,9 +202,7 @@ class Add_Skip_Generator(nn.Module):
         self.d_conv2 = nn.utils.spectral_norm(nn.ConvTranspose2d(2 * F*2, F, kernel_size=4, stride=2, padding=1))
         self.d_bn2 = nn.BatchNorm2d(F)
         self.d_relu2 = nn.LeakyReLU(slope)
-        # self.d_conv3 = nn.ConvTranspose2d(F, 1, kernel_size=4, stride=2, padding=1)
-        # self.d_bn3 = nn.BatchNorm2d(F)
-        # self.d_relu3 = nn.ReLU(0.2)
+
 
         self.resblock5 = ResBlock(2 * F, 2 * F)
         self.final_conv = nn.utils.spectral_norm(nn.ConvTranspose2d(2 * F, 1, kernel_size=4, stride=2, padding=1))
@@ -221,9 +219,10 @@ class Add_Skip_Generator(nn.Module):
         second_skip = self.resblock2(self.e_relu2(self.e_bn2(self.e_conv2(first_skip))))
         bottleneck = self.e_relu3(self.e_bn3(self.e_conv3(second_skip)))
 
-
+        # in bottleneck
         bottleneck = self.resblock3(torch.cat([bottleneck, up_class, noise], dim=1))
         bottleneck = self.dropout1(bottleneck)
+
         # decoder
         upsampled = self.d_relu1(self.d_bn1(self.d_conv1(bottleneck)))
         upsampled = self.resblock4(torch.cat([upsampled, second_skip], dim=1))
@@ -271,46 +270,8 @@ class Discriminator(nn.Module):
         input = self.resblock3(self.relu3(self.bn3(self.conv3(input))))
 
         return self.sig(self.final_conv(input)).view(-1, 1)
-        # return self.final_conv(input).view(-1)
+        # return self.final_conv(input).view(-1) # for wgan
 
-class DiscriminatorWithSketch(nn.Module):
-    def __init__(self, imsize=28):
-        super(DiscriminatorWithSketch, self).__init__()
-        F = 64
-        slope = 0.02
-
-        self.imsize = imsize
-        self.linear = nn.Linear(1, self.imsize**2)
-
-        self.conv1 = nn.utils.spectral_norm(nn.Conv2d(3, F, kernel_size=4, stride=2, padding=1))
-        self.bn1 = nn.BatchNorm2d(F)
-        self.relu1 = nn.LeakyReLU(slope)
-        self.resblock1 = ResBlock(F, F)
-
-        self.conv2 = nn.utils.spectral_norm(nn.Conv2d(F, F*2, kernel_size=4, stride=2, padding=1))
-        self.bn2 = nn.BatchNorm2d(F*2)
-        self.relu2 = nn.LeakyReLU(slope)
-        self.resblock2 = ResBlock(F*2, F*2)
-
-        self.conv3 = nn.utils.spectral_norm(nn.Conv2d(F*2, F*4, kernel_size=4, stride=2, padding=1))
-        self.bn3 = nn.BatchNorm2d(F*4)
-        self.relu3 = nn.LeakyReLU(slope)
-        self.resblock3 = ResBlock(F*4, F*4)
-
-        self.final_conv = nn.utils.spectral_norm(nn.Conv2d(F*4, 1, kernel_size=4, stride=2, padding=1))
-        self.sig = nn.Sigmoid()
-
-    def forward(self, completed, sketch, label):
-
-        up_label = self.linear(label).view(-1, 1, self.imsize, self.imsize)
-        input = torch.cat([completed, sketch, up_label], dim=1)
-
-        input = self.resblock1(self.relu1(self.bn1(self.conv1(input))))
-        input = self.resblock2(self.relu2(self.bn2(self.conv2(input))))
-        input = self.resblock3(self.relu3(self.bn3(self.conv3(input))))
-
-        return self.sig(self.final_conv(input)).view(-1, 1)
-        # return self.final_conv(input).view(-1)
 
 import numpy as np
 # https://discuss.pytorch.org/t/how-do-i-check-the-number-of-parameters-of-a-model/4325/7

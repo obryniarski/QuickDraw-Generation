@@ -15,12 +15,10 @@ num_epochs = 100
 batch_size = 128
 learning_rate = 0.0002
 
-lam = 0.01
 
 real_label = 0.9
 fake_label = 0
 
-# print('Training for {} epochs with device {}:'.format(num_epochs, device))
 
 def train(gen, disc, dataloader, model_name):
 
@@ -62,10 +60,6 @@ def train(gen, disc, dataloader, model_name):
             fake_Dloss.backward()
             fake_acc = fake_accuracy(fake_predictions)
 
-            # fake_predictions = disc(full_imgs, (classes + 1) % 10)
-            # fake_Dloss2 = criterion(fake_predictions, labels)
-            # fake_Dloss2.backward()
-
             D_opt.step()
             disc_loss = fake_Dloss + real_Dloss
 
@@ -74,12 +68,7 @@ def train(gen, disc, dataloader, model_name):
             labels.fill_(1)
             z = torch.rand(size=(len(full_imgs), 100)).to(device)
             fake_imgs = gen(cut_imgs, classes, z)
-            gan_Gloss = criterion(disc(fake_imgs, classes), labels)
-
-            # new_Gloss = base_loss(fake_imgs, cut_imgs)
-            new_Gloss = 0
-
-            Gloss = gan_Gloss + lam * new_Gloss
+            Gloss = criterion(disc(fake_imgs, classes), labels)
             Gloss.backward()
             G_opt.step()
 
@@ -88,10 +77,6 @@ def train(gen, disc, dataloader, model_name):
             writer.add_scalar('Loss/Discriminator', disc_loss, num_iters)
             writer.add_scalars('Accuracy', {'Real':real_acc, 'Fake':fake_acc}, num_iters)
             num_iters += 1
-
-
-        # print('Disc Loss: {}  ----  Gen Loss: {}/{}'.format(disc_loss, new_loss, gen_loss))
-
 
         # checkpoint
         if epoch % 1 == 0 or epoch == num_epochs - 1:
@@ -146,48 +131,34 @@ def train_wgan(gen, disc, dataloader, model_name):
                 D_opt.zero_grad()
                 full_imgs, cut_imgs, classes = next(data)
                 classes = classes.view(-1, 1).float()
-
                 real_predictions = disc(full_imgs, classes)
-                # print('real_shape', real_predictions.shape)
-
                 real_predictions = real_predictions.mean()
-                # print(real_predictions)
                 real_predictions.backward(mone)
-                # real_acc = real_accuracy(real_predictions)
 
                 # fake examples
                 z = torch.rand(size=(len(full_imgs), 100)).to(device)
                 fake_imgs = gen(cut_imgs, classes, z)
                 fake_predictions = disc(fake_imgs, classes)
-                # print('fake', fake_predictions.shape)
                 fake_predictions = fake_predictions.mean()
                 fake_predictions.backward(one)
-                # fake_acc = fake_accuracy(fake_predictions)
-
-                # fake_predictions = disc(full_imgs, (classes + 1) % 10)
-                # fake_Dloss2 = criterion(fake_predictions, labels)
-                # fake_Dloss2.backward()
 
                 eps = torch.rand(len(full_imgs), 1, 1, 1).to(device)
                 eps = eps.expand(full_imgs.shape[0], full_imgs.shape[1], full_imgs.shape[2], full_imgs.shape[3])
                 x_hat = eps * full_imgs + (1 - eps) * fake_imgs
                 x_hat = Variable(x_hat, requires_grad=True)
                 disc_x_hat = disc(x_hat, classes)
-                # disc_x_hat.backward(torch.ones(disc_x_hat.size()).to(device))
-                # x_hat_grad = Variable(x_hat.grad, requires_grad=True)
 
                 x_hat_grad = torch.autograd.grad(outputs=disc_x_hat, inputs=x_hat,
                                    grad_outputs=torch.ones(
                                        disc_x_hat.size()).to(device),
                                    create_graph=True, retain_graph=True)[0]
+
                 x_hat_grad = x_hat_grad.view(x_hat_grad.size(0), -1)
 
                 grad_penalty = ((x_hat_grad.norm(2, dim=1) - 1) ** 2).mean() * gp_lambda
-                # print('penalty', grad_penalty.shape)
                 grad_penalty.backward()
 
                 critic_loss = real_predictions - fake_predictions
-                # critic_loss.backward()
                 D_opt.step()
 
 
@@ -201,30 +172,18 @@ def train_wgan(gen, disc, dataloader, model_name):
             fake_predictions = disc(fake_imgs, classes)
             fake_predictions = fake_predictions.mean()
             fake_predictions.backward(mone)
-            gan_Gloss = -fake_predictions
-            # if epoch == 0:
-            #     new_Gloss = base_loss(fake_imgs, cut_imgs) * lam
-            #     new_Gloss.backward(one)
-            # else:
-            #     new_Gloss = base_loss(fake_imgs, cut_imgs) * lam
-            #     new_Gloss.backward(one)
-            # Gloss = gan_Gloss + lam * new_Gloss
-            # Gloss.backward()
+            Gloss = -fake_predictions
+
             G_opt.step()
 
             # gan_Gloss = -fake_predictions
 
 
-            writer.add_scalar('Loss/Generator', gan_Gloss, num_iters)
+            writer.add_scalar('Loss/Generator', Gloss, num_iters)
             # writer.add_scalar('Loss/GeneratorTotal', new_Gloss, num_iters)
             writer.add_scalar('Loss/Critic', critic_loss, num_iters)
             writer.add_scalar('Extra/Gradient_Penalty', grad_penalty, num_iters)
-            # writer.add_scalars('Accuracy', {'Real':real_acc, 'Fake':fake_acc}, num_iters)
             num_iters += 1
-
-
-        # print('Disc Loss: {}  ----  Gen Loss: {}/{}'.format(disc_loss, new_loss, gen_loss))
-
 
         # checkpoint
         if epoch % 1 == 0 or epoch == num_epochs - 1:

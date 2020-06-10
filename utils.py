@@ -33,8 +33,7 @@ def plot_fake_images(gen, cut_imgs, labels, num_images=5):
         axes[1, i].imshow(generated[i].detach().view(28,28).cpu().detach(), cmap="Greys")
         axes[1, i].axis('off')
         axes[1, i].set_title(labels[i].item())
-        # axes[2, i].imshow(nn.functional.relu(cut_imgs[i].view(28,28).cpu().detach() - 1 * generated[i].detach().view(28,28).cpu()), cmap="Greys")
-        # axes[2, i].axis('off')
+
 
     gen.train()
     return fig
